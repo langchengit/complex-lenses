@@ -1,0 +1,397 @@
+
+<style>
+* { box-sizing: border-box; }
+#app { padding: 1rem 0; }
+#canvas-wrap {
+  position: relative;
+  border-radius: var(--border-radius-lg);
+  border: 0.5px solid var(--color-border-secondary);
+  overflow: hidden;
+}
+#canvas-wrap canvas {
+  display: block; width: 100%; background: #07080f;
+  border-radius: var(--border-radius-lg);
+}
+#hint-bar {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.55); border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 4px 14px;
+  font-size: 11px; color: rgba(255,255,255,0.45);
+  pointer-events: none; white-space: nowrap;
+}
+.panel {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;
+}
+.card {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 12px 14px;
+}
+.card-title {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+  color: var(--color-text-tertiary); text-transform: uppercase; margin-bottom: 10px;
+}
+.ctrl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ctrl-row:last-child { margin-bottom: 0; }
+.ctrl-label { font-size: 12px; color: var(--color-text-secondary); min-width: 72px; }
+.ctrl-val { font-size: 12px; font-weight: 500; color: var(--color-text-primary); min-width: 34px; text-align: right; }
+.ctrl-row input[type=range] { flex: 1; }
+.ctrl-row select { flex: 1; font-size: 12px; }
+.check-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; }
+.check-row:last-child { margin-bottom: 0; }
+.btn-row { display: flex; gap: 6px; margin-top: 4px; }
+.btn-row button { flex: 1; font-size: 12px; padding: 6px 10px; }
+.lens-section { margin-top: 10px; }
+.lens-section-title { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.lens-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; cursor: pointer;
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-secondary); user-select: none; transition: border-color 0.15s, color 0.15s;
+}
+.chip:hover { border-color: var(--color-border-primary); color: var(--color-text-primary); }
+.chip.active { border-color: #4a8fe8; color: #4a8fe8; background: rgba(74,143,232,0.07); }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.chip .rm { color: var(--color-text-tertiary); font-size: 14px; line-height: 1; margin-left: 1px; }
+.chip .rm:hover { color: #e05050; }
+.type-dot-conv { background: #4a8fe8; }
+.type-dot-div  { background: #e8844a; }
+.type-dot-flat { background: #4fc07a; }
+.stat-row { display: flex; gap: 8px; margin-top: 10px; }
+.stat {
+  flex: 1; background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md); padding: 8px 10px;
+  font-size: 11px; color: var(--color-text-tertiary);
+}
+.stat-val { font-size: 16px; font-weight: 500; color: var(--color-text-primary); margin-top: 2px; }
+</style>
+
+<div id="app">
+  <h2 class="sr-only">Interactive lens system simulator — drag lenses and light source to trace rays</h2>
+  <div id="canvas-wrap">
+    <canvas id="c" height="340"></canvas>
+    <div id="hint-bar">Drag source or lenses &nbsp;·&nbsp; double-click canvas to add lens</div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-adjustments-horizontal" aria-hidden="true" style="font-size:13px;margin-right:4px"></i>Add lens</div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">Type</label>
+        <select id="lens-type">
+          <option value="converging">Converging (convex)</option>
+          <option value="diverging">Diverging (concave)</option>
+          <option value="flat">Flat slab</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">Focal length</label>
+        <input type="range" id="focal-input" min="30" max="200" value="90" step="1">
+        <span class="ctrl-val" id="focal-val">90px</span>
+      </div>
+      <div class="btn-row">
+        <button onclick="addLens()"><i class="ti ti-plus" aria-hidden="true"></i> Add lens</button>
+        <button onclick="resetScene()"><i class="ti ti-refresh" aria-hidden="true"></i> Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="ti ti-settings" aria-hidden="true" style="font-size:13px;margin-right:4px"></i>Display</div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">Ray count</label>
+        <input type="range" id="ray-count" min="3" max="21" step="2" value="9">
+        <span class="ctrl-val" id="ray-val">9</span>
+      </div>
+      <div class="check-row"><input type="checkbox" id="show-focal-pts" checked> <label for="show-focal-pts">Show focal points</label></div>
+      <div class="check-row"><input type="checkbox" id="show-axis" checked> <label for="show-axis">Show optical axis</label></div>
+      <div class="check-row"><input type="checkbox" id="show-labels" checked> <label for="show-labels">Show lens labels</label></div>
+    </div>
+  </div>
+
+  <div class="lens-section">
+    <div class="lens-section-title">Lenses — click to select &amp; edit focal length</div>
+    <div class="lens-chips" id="lens-chips"></div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">Lenses<div class="stat-val" id="stat-lenses">2</div></div>
+    <div class="stat">Selected<div class="stat-val" id="stat-sel">—</div></div>
+    <div class="stat">Rays<div class="stat-val" id="stat-rays">9</div></div>
+    <div class="stat">Source Y<div class="stat-val" id="stat-sy">170px</div></div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 680, H = 340;
+canvas.width = W; canvas.height = H;
+
+let state = { source: {x:80,y:H/2}, lenses:[], selectedLens:null, rayCount:9, showFocal:true, showAxis:true, showLabels:true };
+
+function defaultLenses() {
+  state.lenses = [
+    {id:1, x:260, type:'converging', f:90,  label:'L1'},
+    {id:2, x:480, type:'converging', f:120, label:'L2'},
+  ];
+}
+defaultLenses();
+let nextId = 3;
+
+function addLens() {
+  const type = document.getElementById('lens-type').value;
+  const f = parseInt(document.getElementById('focal-input').value);
+  const existingXs = state.lenses.map(l=>l.x);
+  let x = W/2;
+  while(existingXs.some(ex=>Math.abs(ex-x)<30)) x+=40;
+  x = Math.min(W-80, Math.max(80,x));
+  state.lenses.push({id:nextId, x, type, f, label:'L'+nextId});
+  nextId++;
+  state.lenses.sort((a,b)=>a.x-b.x);
+  updateUI(); draw();
+}
+function removeLens(id) {
+  state.lenses = state.lenses.filter(l=>l.id!==id);
+  if(state.selectedLens===id) state.selectedLens=null;
+  updateUI(); draw();
+}
+function selectLens(id) {
+  state.selectedLens = state.selectedLens===id ? null : id;
+  const lens = state.lenses.find(l=>l.id===id);
+  if(lens && state.selectedLens===id) {
+    document.getElementById('focal-input').value = lens.f;
+    document.getElementById('focal-val').textContent = lens.f+'px';
+  }
+  updateUI(); draw();
+}
+
+function updateUI() {
+  const chips = document.getElementById('lens-chips');
+  const typeIcon = {converging:'⊕', diverging:'⊖', flat:'▬'};
+  const dotClass = {converging:'type-dot-conv', diverging:'type-dot-div', flat:'type-dot-flat'};
+  chips.innerHTML = state.lenses.map(l=>`
+    <span class="chip ${state.selectedLens===l.id?'active':''}" onclick="selectLens(${l.id})">
+      <span class="dot ${dotClass[l.type]}"></span>
+      ${l.label} ${typeIcon[l.type]} f=${l.f}px
+      <span class="rm" onclick="event.stopPropagation();removeLens(${l.id})">×</span>
+    </span>`).join('');
+
+  document.getElementById('stat-lenses').textContent = state.lenses.length;
+  const sel = state.lenses.find(l=>l.id===state.selectedLens);
+  document.getElementById('stat-sel').textContent = sel ? sel.label : '—';
+  document.getElementById('stat-rays').textContent = state.rayCount;
+  document.getElementById('stat-sy').textContent = Math.round(state.source.y)+'px';
+}
+
+function refract(ray, lens) {
+  if(Math.abs(ray.dx)<1e-9) return null;
+  const t = (lens.x - ray.x0) / ray.dx;
+  if(t<=0.001) return null;
+  const iy = ray.y0 + t * ray.dy;
+  const h = iy - H/2;
+  const inSlope = ray.dy / ray.dx;
+  let outSlope = lens.type==='flat' ? inSlope :
+    lens.type==='converging' ? inSlope - h/lens.f : inSlope + h/lens.f;
+  const len = Math.sqrt(1+outSlope*outSlope);
+  return {x0:lens.x, y0:iy, dx:1/len, dy:outSlope/len};
+}
+
+function traceRay(sx, sy, angle) {
+  let ray = {x0:sx, y0:sy, dx:Math.cos(angle), dy:Math.sin(angle)};
+  const pts = [{x:ray.x0, y:ray.y0}];
+  for(const lens of [...state.lenses].sort((a,b)=>a.x-b.x).filter(l=>l.x>sx)) {
+    const nr = refract(ray, lens);
+    if(!nr) break;
+    pts.push({x:nr.x0, y:nr.y0});
+    ray = nr;
+  }
+  pts.push({x: ray.x0+ray.dx*800, y: ray.y0+ray.dy*800});
+  return pts;
+}
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#07080f';
+  ctx.fillRect(0,0,W,H);
+
+  const axis = H/2;
+
+  if(state.showAxis) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(140,160,220,0.18)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(0,axis); ctx.lineTo(W,axis); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  for(const lens of state.lenses) {
+    const lx = lens.x, lh = 110;
+    const isSel = lens.id === state.selectedLens;
+    const baseColor = lens.type==='converging' ? '#4a8fe8' : lens.type==='diverging' ? '#e8844a' : '#4fc07a';
+    const alpha = isSel ? 0.35 : 0.15;
+
+    ctx.save();
+    if(lens.type==='converging') {
+      ctx.beginPath();
+      ctx.ellipse(lx-7, axis, 13, lh/2, 0, -Math.PI/2, Math.PI/2);
+      ctx.ellipse(lx+7, axis, 13, lh/2, 0, Math.PI/2, -Math.PI/2);
+      ctx.closePath();
+    } else if(lens.type==='diverging') {
+      ctx.beginPath();
+      ctx.moveTo(lx-4, axis-lh/2);
+      ctx.bezierCurveTo(lx+12, axis-lh/4, lx+12, axis+lh/4, lx-4, axis+lh/2);
+      ctx.bezierCurveTo(lx+4, axis+lh/4, lx+4, axis-lh/4, lx-4, axis-lh/2);
+      ctx.closePath();
+    } else {
+      ctx.beginPath();
+      ctx.rect(lx-5, axis-lh/2, 10, lh);
+    }
+    ctx.fillStyle = baseColor.replace(')', `,${alpha})`).replace('rgb','rgba').replace('#','rgba(').replace(/^rgba\(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2}),/, (m,r,g,b) => `rgba(${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},`);
+    ctx.fillStyle = isSel ? baseColor+'44' : baseColor+'22';
+    ctx.strokeStyle = isSel ? baseColor : baseColor+'cc';
+    ctx.lineWidth = isSel ? 2.5 : 1.5;
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    if(isSel) {
+      ctx.save();
+      ctx.strokeStyle = baseColor+'44';
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(lx, axis-lh/2-4); ctx.lineTo(lx, axis+lh/2+4);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if(state.showFocal && lens.type!=='flat') {
+      [lx-lens.f, lx+lens.f].forEach(fx => {
+        if(fx>0 && fx<W) {
+          ctx.save();
+          ctx.strokeStyle = baseColor+'88';
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([3,3]);
+          ctx.beginPath(); ctx.moveTo(fx, axis-8); ctx.lineTo(fx, axis+8); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(fx, axis, 3.5, 0, Math.PI*2);
+          ctx.fillStyle = baseColor+'cc'; ctx.fill();
+          ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+          ctx.fillStyle = baseColor+'bb';
+          ctx.fillText(fx < lx ? 'F' : "F'", fx, axis+18);
+          ctx.restore();
+        }
+      });
+    }
+
+    if(state.showLabels) {
+      ctx.save();
+      ctx.font = `${isSel?'500 ':''}12px sans-serif`;
+      ctx.fillStyle = isSel ? baseColor : 'rgba(180,195,240,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText(lens.label, lx, axis-lh/2-14);
+      ctx.restore();
+    }
+  }
+
+  const n = state.rayCount;
+  const spread = 0.52;
+  for(let i=0; i<n; i++) {
+    const angle = n===1 ? 0 : -spread/2 + (spread/(n-1))*i;
+    const t = n===1 ? 0.5 : i/(n-1);
+    const hue = 265 - t*230;
+    const pts = traceRay(state.source.x, state.source.y, angle);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for(let j=1; j<pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+    ctx.strokeStyle = `hsla(${hue},85%,65%,0.55)`;
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+  }
+
+  const sx=state.source.x, sy=state.source.y;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(sx, sy, 18, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,228,80,0.08)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(sx, sy, 10, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,228,80,0.15)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(sx, sy, 5.5, 0, Math.PI*2);
+  ctx.fillStyle = '#ffe04e';
+  ctx.strokeStyle = 'rgba(255,255,200,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+let dragTarget=null, dragOffset={x:0,y:0};
+function getPos(e) {
+  const r=canvas.getBoundingClientRect(), sx=W/r.width, sy=H/r.height;
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  return {x:(cx-r.left)*sx, y:(cy-r.top)*sy};
+}
+canvas.addEventListener('mousedown', e => {
+  const p=getPos(e);
+  if(Math.hypot(p.x-state.source.x, p.y-state.source.y)<20) {
+    dragTarget='source'; dragOffset={x:p.x-state.source.x, y:p.y-state.source.y}; return;
+  }
+  for(const l of state.lenses) {
+    if(Math.abs(p.x-l.x)<18 && Math.abs(p.y-H/2)<65) {
+      dragTarget='lens:'+l.id; dragOffset={x:p.x-l.x,y:0};
+      state.selectedLens=l.id;
+      document.getElementById('focal-input').value=l.f;
+      document.getElementById('focal-val').textContent=l.f+'px';
+      updateUI(); draw(); return;
+    }
+  }
+  if(e.detail===2) {
+    const type=document.getElementById('lens-type').value;
+    const f=parseInt(document.getElementById('focal-input').value);
+    if(p.x>50 && p.x<W-50) {
+      state.lenses.push({id:nextId, x:Math.round(p.x), type, f, label:'L'+nextId});
+      nextId++; state.lenses.sort((a,b)=>a.x-b.x); updateUI(); draw();
+    }
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if(!dragTarget) return;
+  const p=getPos(e);
+  if(dragTarget==='source') {
+    state.source.x=Math.max(20, Math.min(W-20, p.x-dragOffset.x));
+    state.source.y=Math.max(20, Math.min(H-20, p.y-dragOffset.y));
+  } else if(dragTarget.startsWith('lens:')) {
+    const id=parseInt(dragTarget.split(':')[1]);
+    const l=state.lenses.find(l=>l.id===id);
+    if(l) l.x=Math.max(50, Math.min(W-50, p.x-dragOffset.x));
+  }
+  updateUI(); draw();
+});
+canvas.addEventListener('mouseup', ()=>{dragTarget=null;});
+canvas.addEventListener('mouseleave', ()=>{dragTarget=null;});
+
+document.getElementById('ray-count').addEventListener('input', function() {
+  state.rayCount=parseInt(this.value);
+  document.getElementById('ray-val').textContent=this.value;
+  updateUI(); draw();
+});
+document.getElementById('focal-input').addEventListener('input', function() {
+  const f=parseInt(this.value);
+  document.getElementById('focal-val').textContent=f+'px';
+  if(state.selectedLens) {
+    const l=state.lenses.find(l=>l.id===state.selectedLens);
+    if(l) { l.f=f; updateUI(); draw(); }
+  }
+});
+document.getElementById('show-focal-pts').addEventListener('change', function() { state.showFocal=this.checked; draw(); });
+document.getElementById('show-axis').addEventListener('change', function() { state.showAxis=this.checked; draw(); });
+document.getElementById('show-labels').addEventListener('change', function() { state.showLabels=this.checked; draw(); });
+
+function resetScene() {
+  state.source={x:80,y:H/2}; defaultLenses();
+  state.selectedLens=null; nextId=3; updateUI(); draw();
+}
+
+updateUI(); draw();
+</script>
